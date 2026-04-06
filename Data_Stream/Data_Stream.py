@@ -20,7 +20,7 @@ class data_stream_tool:
         self.cursor.execute(f"USE {database};")
         self.config["database"] = database
 
-    def map_dtype(self,pandas_dtype):
+    def __map_dtype(self,pandas_dtype):
         if pd.api.types.is_float_dtype(pandas_dtype):
             return "FLOAT"
         elif pd.api.types.is_integer_dtype(pandas_dtype):
@@ -54,9 +54,9 @@ class data_stream_tool:
 
         if time_steps:
             df.rename(columns={df.columns[-1]: "Label"}, inplace=True)
-            table_str = f"({','.join([f'`{i}` {self.map_dtype(df[i].dtype)}' for i in df.columns[:-1]])}, Label FLOAT);"
+            table_str = f"({','.join([f'`{i}` {self.__map_dtype(df[i].dtype)}' for i in df.columns[:-1]])}, Label FLOAT);"
         else:
-            table_str = f"({','.join([f'`{i}` {self.map_dtype(df[i].dtype)}' for i in df.columns])});"
+            table_str = f"({','.join([f'`{i}` {self.__map_dtype(df[i].dtype)}' for i in df.columns])});"
 
         if random:
             df = df.sample(frac=1, random_state=random_state).reset_index(drop=True)
@@ -114,8 +114,6 @@ class data_stream_tool:
 
             self.conn.commit()
 
-            # discard ram memory
-            print("Purging DataFrame from RAM...")
             del df
             del split_df
             gc.collect()
@@ -139,8 +137,6 @@ class data_stream_tool:
 
             self.conn.commit()
 
-            # discard ram memory
-            print("Purging DataFrame from RAM...")
             del df
             gc.collect()
 
@@ -152,9 +148,6 @@ class data_stream_tool:
     def show_exist(self):
         self.cursor.execute(f"SHOW TABLES;")
         print(pd.DataFrame(self.cursor.fetchall(), columns = ["Existing Tables"]))
-
-    def update_table(self,table_name,dataframe):
-        pass
 
 
 class Table:
