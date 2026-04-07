@@ -1,5 +1,4 @@
 from Data_Stream.Data_Stream import data_stream_tool
-import pandas as pd
 import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.callbacks import ModelCheckpoint
@@ -77,7 +76,14 @@ val_dataset = val_dataset.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
 history = model.fit(
     train_dataset,
-    epochs=150,
+    epochs=30,
     validation_data=val_dataset,
     callbacks=checkpoint
 )
+
+print("Finish Training")
+
+x_test, y_test = test.get_dataset()
+
+print("Predictions:\n",model.predict(x_test.iloc[:10,:]))
+print("True Labels:\n",y_test.iloc[:10])
