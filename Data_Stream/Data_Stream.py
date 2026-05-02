@@ -149,16 +149,117 @@ class data_stream_tool:
         self.cursor.execute(f"SHOW TABLES;")
         print(pd.DataFrame(self.cursor.fetchall(), columns = ["Existing Tables"]))
 
+    def execute_query(self, query):
+        try:
+            self.cursor.execute(query)
+            self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+        return self.cursor.fetchall()
+
 
 class Table:
     def __init__(self, table_name, conn):
         self.table_name = table_name
         self.conn = conn
+        self.cursor = self.conn.cursor()
 
-    def get_dataset(self):
+    def __seperate_label_feature(self, df, label_loc, label_name):
+        if label_loc is None and label_name is None:
+            return df.iloc[:,:-1], df.iloc[:,-1]
+
+        elif label_name is not None:
+            if isinstance(label_name, str):
+                label_name = [label_name]
+
+            y = df.loc[:,label_name]
+            X = df.drop(label_name, axis=1)
+
+            return X, y
+
+        if isinstance(label_loc, int):
+            label_loc = [label_loc]
+
+        y = df.iloc[:, label_loc]
+        X = df.drop(df.columns[label_loc], axis=1)
+
+        return X, y
+
+    def drop_column(self, columns):
+        query_col = ",".join([f"`{column}`" for column in columns])
+        try:
+            self.cursor.execute(f"ALTER TABLE {self.table_name} DROP COLUMN {query_col};")
+            self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def delete_row(self, and_condition=None, or_condition=None):
+        # 1. Raise a proper Exception class, not a string
+        if and_condition is None and or_condition is None:
+            raise ValueError("Both conditions cannot be None. Please provide at least one.")
+
+        # 2. Initialize the query parts
+        query = f"DELETE FROM `{self.table_name}` WHERE "
+        conditions = []
+        values = []
+
+        # 3. Process AND conditions (Expected format: dictionary {"col": "value"})
+        if and_condition:
+            and_clauses = []
+            for col, val in and_condition.items():
+                and_clauses.append(f"`{col}` = %s")
+                values.append(val)
+            conditions.append("(" + " AND ".join(and_clauses) + ")")
+
+        # 4. Process OR conditions (Expected format: dictionary {"col": "value"})
+        if or_condition:
+            or_clauses = []
+            for col, val in or_condition.items():
+                or_clauses.append(f"`{col}` = %s")
+                values.append(val)
+            conditions.append("(" + " OR ".join(or_clauses) + ")")
+
+        query += " AND ".join(conditions) + ";"
+
+        # 5. Execute the query
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(query, tuple(values))
+            self.conn.commit()
+            print(f"Success: {cursor.rowcount} row(s) deleted.")
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def get_dataset(self, label_name = None, label_loc = None):
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
-
             df = pd.read_sql(f"SELECT * FROM `{self.table_name}`;", con=self.conn)
 
-        return df.iloc[:, :-1], df.iloc[:, -1]
+        return self.__seperate_label_feature(df, label_loc, label_name)
+
+    def get_partial(self, location, columns = "index", label_name = None, label_loc = None):
+
+        if columns == "index":
+            self.cursor.execute(f"""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = '{self.table_name}'
+                AND TABLE_SCHEMA = DATABASE()
+                AND ORDINAL_POSITION in {tuple(location)};
+""")
+            results = self.cursor.fetchall()
+            location = [row[0] for row in results]
+        else:
+            if isinstance(location, str):
+                location = [location]
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', UserWarning)
+            
+            df = pd.read_sql(f"SELECT {','.join([f'`{column}`' for column in location])} FROM `{self.table_name}`;", con=self.conn)
+
+        return self.__seperate_label_feature(df, label_loc, label_name)
