@@ -188,9 +188,9 @@ class Table:
         return X, y
 
     def drop_column(self, columns):
-        query_col = ",".join([f"`{column}`" for column in columns])
+        query_col = ", ".join([f"DROP COLUMN `{column}`" for column in columns])
         try:
-            self.cursor.execute(f"ALTER TABLE {self.table_name} DROP COLUMN {query_col};")
+            self.cursor.execute(f"ALTER TABLE `{self.table_name}` {query_col};")
             self.conn.commit()
         except Exception as e:
             self.conn.rollback()
